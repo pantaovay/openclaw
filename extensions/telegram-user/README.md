@@ -128,15 +128,17 @@ Configuration lives in your OpenClaw config file (`~/.openclaw/openclaw.json`):
 
 The agent tool provides 7 actions:
 
-| Action     | Description                            | Required Params     |
-| ---------- | -------------------------------------- | ------------------- |
-| `send`     | Send a text message                    | `chatId`, `message` |
-| `history`  | Read chat history                      | `chatId`            |
-| `contacts` | List DM contacts                       | —                   |
-| `dialogs`  | List all chats (DMs, groups, channels) | —                   |
-| `search`   | Search messages globally or in a chat  | `query`             |
-| `me`       | Get authenticated user info            | —                   |
-| `status`   | Check connection status                | —                   |
+| Action     | Description                            | Required Params     | Optional Params   |
+| ---------- | -------------------------------------- | ------------------- | ----------------- |
+| `send`     | Send a text message                    | `chatId`, `message` | `replyToMsgId`    |
+| `history`  | Read chat history                      | `chatId`            | `limit`           |
+| `contacts` | List DM contacts                       | —                   | `query`, `limit`  |
+| `dialogs`  | List all chats (DMs, groups, channels) | —                   | `limit`           |
+| `search`   | Search messages globally or in a chat  | `query`             | `chatId`, `limit` |
+| `me`       | Get authenticated user info            | —                   | —                 |
+| `status`   | Check connection status                | —                   | —                 |
+
+The `limit` parameter defaults to 20–50 depending on the action and is capped at 200.
 
 ## Templates
 
