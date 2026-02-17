@@ -30,26 +30,45 @@ OpenClaw extension for Telegram Personal Account messaging via [GramJS](https://
 openclaw onboard
 ```
 
-Select "Telegram (Personal Account)" when prompted. The wizard will guide you through entering API credentials and logging in with your phone number.
+Select "Telegram (Personal Account)" when prompted. The wizard will guide you through entering API credentials and logging in with your phone number. API credentials, session, and all settings are automatically saved to your config file.
 
 ### Option 2: Manual Setup
 
-1. Set environment variables:
+1. Add your API credentials to the config file (`~/.openclaw/openclaw.json`):
+
+```json
+{
+  "channels": {
+    "telegram-user": {
+      "apiId": 12345678,
+      "apiHash": "abcdef0123456789abcdef0123456789"
+    }
+  }
+}
+```
+
+Alternatively, set environment variables as a fallback:
 
 ```bash
 export TELEGRAM_API_ID=12345678
 export TELEGRAM_API_HASH=abcdef0123456789abcdef0123456789
 ```
 
-2. Run the channel login:
+2. Enable the plugin:
+
+```bash
+openclaw plugins enable telegram-user
+```
+
+3. Run the channel login:
 
 ```bash
 openclaw channels login --channel telegram-user
 ```
 
-3. Enter your phone number and the verification code sent to your Telegram app.
+4. Enter your phone number and the verification code sent to your Telegram app. On success, the session string and API credentials are saved to your config file automatically.
 
-4. Start the gateway:
+5. Start the gateway:
 
 ```bash
 openclaw gateway --verbose
@@ -61,6 +80,13 @@ Configuration lives in your OpenClaw config file (`~/.openclaw/openclaw.json`):
 
 ```json
 {
+  "plugins": {
+    "entries": {
+      "telegram-user": {
+        "enabled": true
+      }
+    }
+  },
   "channels": {
     "telegram-user": {
       "enabled": true,
@@ -74,6 +100,8 @@ Configuration lives in your OpenClaw config file (`~/.openclaw/openclaw.json`):
 }
 ```
 
+> **Note:** The `plugins.entries.telegram-user.enabled` field is required to load the plugin. The `channels.telegram-user` section stores your credentials and channel settings. Both must be present.
+
 ### Environment Variables
 
 | Variable                | Description                                   |
@@ -82,14 +110,18 @@ Configuration lives in your OpenClaw config file (`~/.openclaw/openclaw.json`):
 | `TELEGRAM_API_HASH`     | Telegram API Hash (fallback if not in config) |
 | `TELEGRAM_USER_SESSION` | Session string (fallback if not in config)    |
 
+Environment variables serve as fallbacks only. The recommended approach is to store credentials in the config file (they are saved automatically during login).
+
 ### DM Policy Options
 
 | Policy              | Behavior                                                                    |
 | ------------------- | --------------------------------------------------------------------------- |
 | `pairing` (default) | Unknown senders get a pairing code; approve with `openclaw pairing approve` |
 | `allowlist`         | Only senders in `allowFrom` list can message                                |
-| `open`              | Anyone can message (use with caution)                                       |
+| `open`              | Anyone can message (requires `allowFrom: ["*"]`)                            |
 | `disabled`          | All DMs are ignored                                                         |
+
+> **Note:** When using `dmPolicy: "open"`, you must also set `"allowFrom": ["*"]` in the channel config. Run `openclaw doctor --fix` to add it automatically.
 
 ### Group Policy Options
 
@@ -164,13 +196,33 @@ pnpm vitest watch extensions/telegram-user/
 
 ## Troubleshooting
 
+### "Unsupported channel: telegram-user"
+
+The plugin is not loaded. Enable it first:
+
+```bash
+openclaw plugins enable telegram-user
+```
+
 ### "Missing Telegram API credentials"
 
-Set `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` environment variables, or add `apiId`/`apiHash` to your config.
+Add `apiId` and `apiHash` to your config file under `channels.telegram-user`, or set `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` environment variables as fallback.
 
-### "No session string configured"
+### "Not configured or not authenticated"
 
-Run `openclaw channels login --channel telegram-user` to complete the MTProto login flow.
+The session string or API credentials are missing from config. Re-run login:
+
+```bash
+openclaw channels login --channel telegram-user
+```
+
+Login now saves `apiId`, `apiHash`, and `session` to your config file automatically.
+
+### Not receiving messages
+
+1. Check that `dmPolicy` is set correctly. If using `"open"`, you must also set `"allowFrom": ["*"]`. Run `openclaw doctor --fix` to add it.
+2. Verify the gateway log shows `[telegram-user] [default] connected as ...`. If not, the plugin is not loaded or not configured.
+3. Messages must be **text** (not stickers, images, or media-only) and from a **different account** (self-messages are filtered).
 
 ### "FloodWaitError" from Telegram
 
