@@ -226,6 +226,14 @@ async function processMessage(
   });
 
   const fromLabel = isGroup ? `group:${groupName || chatId}` : senderName || `user:${senderId}`;
+
+  // Build body with quoted message context if replying to a message
+  let bodyForAgent = rawBody;
+  if (message.quotedText) {
+    const quotedFrom = message.quotedSenderName ?? "someone";
+    bodyForAgent = `[Replying to ${quotedFrom}: "${message.quotedText}"]\n\n${rawBody}`;
+  }
+
   const storePath = core.channel.session.resolveStorePath(config.session?.store, {
     agentId: route.agentId,
   });
@@ -240,12 +248,12 @@ async function processMessage(
     timestamp: timestamp ? timestamp * 1000 : undefined,
     previousTimestamp,
     envelope: envelopeOptions,
-    body: rawBody,
+    body: bodyForAgent,
   });
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
     Body: body,
-    BodyForAgent: rawBody,
+    BodyForAgent: bodyForAgent,
     RawBody: rawBody,
     CommandBody: rawBody,
     From: isGroup ? `telegram-user:group:${chatId}` : `telegram-user:${senderId}`,
@@ -438,15 +446,11 @@ export async function monitorTelegramUserProvider(
       let selfId: string | null = null;
 
       setupMessageListener(client, selfId, (msg) => {
-        console.log(
-          `[telegram-user] [debug] monitor callback: senderId=${msg.senderId} selfId=${selfId} text=${msg.text?.slice(0, 30)}`,
-        );
         if (!client) {
           return; // client torn down between event queue and handler execution
         }
         // Filter self messages here since selfId is resolved after handler registration
         if (selfId && msg.senderId === selfId) {
-          console.log(`[telegram-user] [debug] monitor: skipping self message`);
           return;
         }
         logVerbose(core, runtime, `[${account.accountId}] inbound message from ${msg.senderId}`);

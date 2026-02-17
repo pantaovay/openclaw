@@ -61,6 +61,8 @@ export type TelegramUserMessage = {
   isChannel: boolean;
   groupName?: string;
   replyToMsgId?: number;
+  quotedText?: string;
+  quotedSenderName?: string;
   mediaType?: "photo" | "document" | "video" | "audio" | "sticker";
 };
 

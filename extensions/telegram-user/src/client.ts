@@ -109,9 +109,6 @@ export function setupMessageListener(
   client.addEventHandler(
     async (event: NewMessageEvent) => {
       const message = event.message;
-      console.log(
-        `[telegram-user] [debug] raw event: msgId=${message?.id} text=${message?.text?.slice(0, 30)} senderId=${message?.senderId?.toJSON()}`,
-      );
       if (!message || !message.text?.trim()) {
         return;
       }
@@ -121,7 +118,6 @@ export function setupMessageListener(
       if (selfId) {
         const fromId = String(message.senderId?.toJSON() ?? "");
         if (fromId === selfId) {
-          console.log(`[telegram-user] [debug] skipping self message from ${fromId}`);
           return;
         }
       }
@@ -148,6 +144,36 @@ export function setupMessageListener(
         }
       }
 
+      const replyToMsgId =
+        message.replyTo instanceof Api.MessageReplyHeader
+          ? message.replyTo.replyToMsgId
+          : undefined;
+
+      // Fetch quoted message content when replying to a message
+      let quotedText: string | undefined;
+      let quotedSenderName: string | undefined;
+      if (replyToMsgId) {
+        try {
+          const quoted = await client.getMessages(message.chatId!, {
+            ids: [replyToMsgId],
+          });
+          const quotedMsg = quoted[0];
+          if (quotedMsg?.text) {
+            quotedText = quotedMsg.text;
+            await quotedMsg.getSender();
+            const quotedSender = quotedMsg.sender;
+            if (quotedSender instanceof Api.User) {
+              quotedSenderName =
+                [quotedSender.firstName, quotedSender.lastName].filter(Boolean).join(" ") ||
+                quotedSender.username ||
+                String(quotedSender.id);
+            }
+          }
+        } catch {
+          // non-fatal: proceed without quoted context
+        }
+      }
+
       const parsed: TelegramUserMessage = {
         chatId,
         messageId: message.id,
@@ -159,10 +185,9 @@ export function setupMessageListener(
         isGroup,
         isChannel,
         groupName,
-        replyToMsgId:
-          message.replyTo instanceof Api.MessageReplyHeader
-            ? message.replyTo.replyToMsgId
-            : undefined,
+        replyToMsgId,
+        quotedText,
+        quotedSenderName,
       };
 
       onMessage(parsed);
