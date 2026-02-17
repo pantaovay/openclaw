@@ -437,13 +437,11 @@ export async function monitorTelegramUserProvider(
       });
 
       await connectClient(client);
-      runtime.error(`[${account.accountId}] GramJS connected, registering event handler`);
-
-      // Debug: listen for ALL raw updates to verify GramJS receives anything
-      client.addEventHandler((update: unknown) => {
-        const name = update?.constructor?.name ?? typeof update;
-        runtime.error(`[${account.accountId}] raw update: ${name}`);
-      });
+      logVerbose(
+        core,
+        runtime,
+        `[${account.accountId}] GramJS connected, registering event handler`,
+      );
 
       // Register event handler BEFORE any high-level API calls (getMe/getDialogs).
       // GramJS must have the handler in place before Telegram's update stream is
@@ -453,7 +451,9 @@ export async function monitorTelegramUserProvider(
       let selfId: string | null = null;
 
       setupMessageListener(client, selfId, (msg) => {
-        runtime.error(
+        logVerbose(
+          core,
+          runtime,
           `[${account.accountId}] event handler fired: senderId=${msg.senderId} text=${msg.text?.slice(0, 30)}`,
         );
         if (!client) {
@@ -461,7 +461,7 @@ export async function monitorTelegramUserProvider(
         }
         // Filter self messages here since selfId is resolved after handler registration
         if (selfId && msg.senderId === selfId) {
-          runtime.error(`[${account.accountId}] skipping self message`);
+          logVerbose(core, runtime, `[${account.accountId}] skipping self message`);
           return;
         }
         logVerbose(core, runtime, `[${account.accountId}] inbound message from ${msg.senderId}`);
@@ -471,17 +471,17 @@ export async function monitorTelegramUserProvider(
         });
       });
 
-      runtime.error(`[${account.accountId}] event handler registered, calling getMe`);
+      logVerbose(core, runtime, `[${account.accountId}] event handler registered, calling getMe`);
 
       // Now make high-level calls to initialize the update stream
       const self = await getSelfInfo(client);
       selfId = self.userId;
-      runtime.error(`[${account.accountId}] getMe done: selfId=${selfId}`);
+      logVerbose(core, runtime, `[${account.accountId}] getMe done: selfId=${selfId}`);
 
       // Fetch dialogs to populate GramJS entity cache
       try {
         await client.getDialogs({ limit: 1 });
-        runtime.error(`[${account.accountId}] getDialogs done`);
+        logVerbose(core, runtime, `[${account.accountId}] getDialogs done`);
       } catch {
         // non-fatal: listener may still work for known entities
       }
@@ -498,7 +498,9 @@ export async function monitorTelegramUserProvider(
         updatePts = state.pts;
         updateQts = state.qts;
         updateDate = state.date;
-        runtime.error(
+        logVerbose(
+          core,
+          runtime,
           `[${account.accountId}] update state: pts=${updatePts} qts=${updateQts} date=${updateDate}`,
         );
       } catch {
@@ -528,7 +530,9 @@ export async function monitorTelegramUserProvider(
               updateDate = diff.state.date;
               // Feed recovered updates back into GramJS event handler pipeline
               if (diff.newMessages.length > 0 || diff.otherUpdates.length > 0) {
-                runtime.error(
+                logVerbose(
+                  core,
+                  runtime,
                   `[${account.accountId}] getDifference: ${diff.newMessages.length} messages, ${diff.otherUpdates.length} other updates`,
                 );
                 // Dispatch new messages as UpdateNewMessage so event handlers fire
@@ -545,7 +549,9 @@ export async function monitorTelegramUserProvider(
               updateQts = diff.intermediateState.qts;
               updateDate = diff.intermediateState.date;
               if (diff.newMessages.length > 0) {
-                runtime.error(
+                logVerbose(
+                  core,
+                  runtime,
                   `[${account.accountId}] getDifference (slice): ${diff.newMessages.length} messages`,
                 );
                 for (const msg of diff.newMessages) {
@@ -559,7 +565,9 @@ export async function monitorTelegramUserProvider(
             } else if (diff instanceof Api.updates.DifferenceTooLong) {
               // State diverged too much — reset to current state
               updatePts = diff.pts;
-              runtime.error(
+              logVerbose(
+                core,
+                runtime,
                 `[${account.accountId}] getDifference: too long, resetting pts=${diff.pts}`,
               );
               const freshState = await client.invoke(new Api.updates.GetState());
