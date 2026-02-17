@@ -430,14 +430,20 @@ export async function monitorTelegramUserProvider(
 
       await connectClient(client);
 
-      // Register event handler BEFORE any high-level calls.
-      // GramJS requires the handler to be in place before getMe()/getDialogs()
-      // so that Telegram's update stream is properly initialized.
-      const self = await getSelfInfo(client);
+      // Register event handler BEFORE any high-level API calls (getMe/getDialogs).
+      // GramJS must have the handler in place before Telegram's update stream is
+      // initialized by a high-level request. We use a late-binding selfId so the
+      // handler is registered first, then getMe() triggers the update stream.
+      // See: https://github.com/gram-js/gramjs/issues/280
+      let selfId: string | null = null;
 
-      setupMessageListener(client, self.userId, (msg) => {
+      setupMessageListener(client, selfId, (msg) => {
         if (!client) {
           return; // client torn down between event queue and handler execution
+        }
+        // Filter self messages here since selfId is resolved after handler registration
+        if (selfId && msg.senderId === selfId) {
+          return;
         }
         logVerbose(core, runtime, `[${account.accountId}] inbound message from ${msg.senderId}`);
         statusSink?.({ lastInboundAt: Date.now() });
@@ -446,15 +452,18 @@ export async function monitorTelegramUserProvider(
         });
       });
 
-      // Fetch dialogs to populate GramJS entity cache and signal update readiness
+      // Now make high-level calls to initialize the update stream
+      const self = await getSelfInfo(client);
+      selfId = self.userId;
+
+      // Fetch dialogs to populate GramJS entity cache
       try {
         await client.getDialogs({ limit: 1 });
       } catch {
         // non-fatal: listener may still work for known entities
       }
 
-      // Periodic keep-alive: call getMe() to prevent GramJS update stream from going stale.
-      // See: https://github.com/gram-js/gramjs/issues/280
+      // Periodic keep-alive: call getMe() to prevent update stream from going stale.
       keepAliveTimer = setInterval(() => {
         if (!client || stopped) {
           return;

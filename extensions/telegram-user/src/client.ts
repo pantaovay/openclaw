@@ -103,7 +103,7 @@ function extractSenderInfo(message: Api.Message): {
 
 export function setupMessageListener(
   client: TelegramClient,
-  selfId: string,
+  selfId: string | null,
   onMessage: (msg: TelegramUserMessage) => void,
 ): void {
   client.addEventHandler(
@@ -113,10 +113,13 @@ export function setupMessageListener(
         return;
       }
 
-      // Skip messages from self
-      const fromId = String(message.senderId?.toJSON() ?? "");
-      if (fromId === selfId) {
-        return;
+      // Skip messages from self (selfId may be null when handler is registered
+      // before getMe(); caller is responsible for filtering in that case)
+      if (selfId) {
+        const fromId = String(message.senderId?.toJSON() ?? "");
+        if (fromId === selfId) {
+          return;
+        }
       }
 
       await message.getChat();
