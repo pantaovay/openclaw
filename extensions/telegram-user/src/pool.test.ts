@@ -1,17 +1,24 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the telegram module before importing pool
-vi.mock("telegram", () => ({
-  TelegramClient: vi.fn().mockImplementation(() => ({
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    connected: true,
-  })),
-}));
+vi.mock("telegram", () => {
+  const MockTelegramClient = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.connect = vi.fn().mockResolvedValue(undefined);
+    this.disconnect = vi.fn().mockResolvedValue(undefined);
+    this.connected = true;
+  });
+  return { TelegramClient: MockTelegramClient };
+});
 
-vi.mock("telegram/sessions/index.js", () => ({
-  StringSession: vi.fn().mockImplementation((session: string) => ({ session })),
-}));
+vi.mock("telegram/sessions/index.js", () => {
+  const MockStringSession = vi.fn().mockImplementation(function (
+    this: { session: string },
+    session: string,
+  ) {
+    this.session = session;
+  });
+  return { StringSession: MockStringSession };
+});
 
 import { getClientPool, destroyClientPool } from "./pool.js";
 
