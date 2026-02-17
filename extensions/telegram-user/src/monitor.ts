@@ -438,11 +438,15 @@ export async function monitorTelegramUserProvider(
       let selfId: string | null = null;
 
       setupMessageListener(client, selfId, (msg) => {
+        console.log(
+          `[telegram-user] [debug] monitor callback: senderId=${msg.senderId} selfId=${selfId} text=${msg.text?.slice(0, 30)}`,
+        );
         if (!client) {
           return; // client torn down between event queue and handler execution
         }
         // Filter self messages here since selfId is resolved after handler registration
         if (selfId && msg.senderId === selfId) {
+          console.log(`[telegram-user] [debug] monitor: skipping self message`);
           return;
         }
         logVerbose(core, runtime, `[${account.accountId}] inbound message from ${msg.senderId}`);

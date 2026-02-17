@@ -109,6 +109,9 @@ export function setupMessageListener(
   client.addEventHandler(
     async (event: NewMessageEvent) => {
       const message = event.message;
+      console.log(
+        `[telegram-user] [debug] raw event: msgId=${message?.id} text=${message?.text?.slice(0, 30)} senderId=${message?.senderId?.toJSON()}`,
+      );
       if (!message || !message.text?.trim()) {
         return;
       }
@@ -118,6 +121,7 @@ export function setupMessageListener(
       if (selfId) {
         const fromId = String(message.senderId?.toJSON() ?? "");
         if (fromId === selfId) {
+          console.log(`[telegram-user] [debug] skipping self message from ${fromId}`);
           return;
         }
       }
