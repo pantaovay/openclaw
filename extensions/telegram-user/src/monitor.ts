@@ -389,13 +389,20 @@ export async function monitorTelegramUserProvider(
   let stopped = false;
   let client: TelegramClient | null = null;
   let restartTimer: ReturnType<typeof setTimeout> | null = null;
+  let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   let resolveRunning: (() => void) | null = null;
+
+  const KEEP_ALIVE_INTERVAL_MS = 60_000; // ping every 60s to keep update stream alive
 
   const stop = () => {
     stopped = true;
     if (restartTimer) {
       clearTimeout(restartTimer);
       restartTimer = null;
+    }
+    if (keepAliveTimer) {
+      clearInterval(keepAliveTimer);
+      keepAliveTimer = null;
     }
     if (client) {
       destroyClient(client).catch((err) => {
@@ -445,6 +452,17 @@ export async function monitorTelegramUserProvider(
       } catch {
         // non-fatal: listener may still work for known entities
       }
+
+      // Periodic keep-alive: call getMe() to prevent GramJS update stream from going stale.
+      // See: https://github.com/gram-js/gramjs/issues/280
+      keepAliveTimer = setInterval(() => {
+        if (!client || stopped) {
+          return;
+        }
+        client.getMe().catch(() => {
+          // ignore keep-alive errors; reconnect logic handles actual failures
+        });
+      }, KEEP_ALIVE_INTERVAL_MS);
 
       logVerbose(
         core,
