@@ -422,20 +422,11 @@ export async function monitorTelegramUserProvider(
       });
 
       await connectClient(client);
+
+      // Register event handler BEFORE any high-level calls.
+      // GramJS requires the handler to be in place before getMe()/getDialogs()
+      // so that Telegram's update stream is properly initialized.
       const self = await getSelfInfo(client);
-
-      // Fetch dialogs to populate GramJS entity cache, required for NewMessage events
-      try {
-        await client.getDialogs({ limit: 1 });
-      } catch {
-        // non-fatal: listener may still work for known entities
-      }
-
-      logVerbose(
-        core,
-        runtime,
-        `[${account.accountId}] connected as ${self.firstName ?? ""} ${self.lastName ?? ""} (@${self.username ?? "?"})`,
-      );
 
       setupMessageListener(client, self.userId, (msg) => {
         if (!client) {
@@ -447,6 +438,19 @@ export async function monitorTelegramUserProvider(
           runtime.error(`[${account.accountId}] Failed to process message: ${String(err)}`);
         });
       });
+
+      // Fetch dialogs to populate GramJS entity cache and signal update readiness
+      try {
+        await client.getDialogs({ limit: 1 });
+      } catch {
+        // non-fatal: listener may still work for known entities
+      }
+
+      logVerbose(
+        core,
+        runtime,
+        `[${account.accountId}] connected as ${self.firstName ?? ""} ${self.lastName ?? ""} (@${self.username ?? "?"})`,
+      );
     } catch (err) {
       runtime.error(`[${account.accountId}] GramJS connection error: ${String(err)}`);
       // Clean up the failed client to prevent connection leaks
