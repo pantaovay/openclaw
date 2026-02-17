@@ -323,6 +323,7 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
               filter: new Api.ChannelParticipantsRecent(),
               offset: 0,
               limit: limit ?? 100,
+              // GramJS types hash as Api.long (BigInt), but accepts 0 at runtime
               hash: 0 as unknown as Api.long,
             }),
           );
