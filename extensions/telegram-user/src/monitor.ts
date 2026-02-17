@@ -437,6 +437,7 @@ export async function monitorTelegramUserProvider(
       });
 
       await connectClient(client);
+      runtime.error(`[${account.accountId}] GramJS connected, registering event handler`);
 
       // Register event handler BEFORE any high-level API calls (getMe/getDialogs).
       // GramJS must have the handler in place before Telegram's update stream is
@@ -446,11 +447,15 @@ export async function monitorTelegramUserProvider(
       let selfId: string | null = null;
 
       setupMessageListener(client, selfId, (msg) => {
+        runtime.error(
+          `[${account.accountId}] event handler fired: senderId=${msg.senderId} text=${msg.text?.slice(0, 30)}`,
+        );
         if (!client) {
           return; // client torn down between event queue and handler execution
         }
         // Filter self messages here since selfId is resolved after handler registration
         if (selfId && msg.senderId === selfId) {
+          runtime.error(`[${account.accountId}] skipping self message`);
           return;
         }
         logVerbose(core, runtime, `[${account.accountId}] inbound message from ${msg.senderId}`);
@@ -460,13 +465,17 @@ export async function monitorTelegramUserProvider(
         });
       });
 
+      runtime.error(`[${account.accountId}] event handler registered, calling getMe`);
+
       // Now make high-level calls to initialize the update stream
       const self = await getSelfInfo(client);
       selfId = self.userId;
+      runtime.error(`[${account.accountId}] getMe done: selfId=${selfId}`);
 
       // Fetch dialogs to populate GramJS entity cache
       try {
         await client.getDialogs({ limit: 1 });
+        runtime.error(`[${account.accountId}] getDialogs done`);
       } catch {
         // non-fatal: listener may still work for known entities
       }
