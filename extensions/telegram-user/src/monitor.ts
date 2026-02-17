@@ -1,6 +1,6 @@
 import type { OpenClawConfig, MarkdownTableMode, RuntimeEnv } from "openclaw/plugin-sdk";
 import { createReplyPrefixOptions, resolveSenderCommandAuthorization } from "openclaw/plugin-sdk";
-import type { TelegramClient } from "telegram";
+import { type TelegramClient, Api } from "telegram";
 import {
   createTelegramUserClient,
   connectClient,
@@ -400,7 +400,7 @@ export async function monitorTelegramUserProvider(
   let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   let resolveRunning: (() => void) | null = null;
 
-  const KEEP_ALIVE_INTERVAL_MS = 60_000; // ping every 60s to keep update stream alive
+  const KEEP_ALIVE_INTERVAL_MS = 15_000; // poll every 15s to maintain "last active" status
 
   const stop = () => {
     stopped = true;
@@ -486,14 +486,97 @@ export async function monitorTelegramUserProvider(
         // non-fatal: listener may still work for known entities
       }
 
-      // Periodic keep-alive: call getMe() to prevent update stream from going stale.
-      keepAliveTimer = setInterval(() => {
+      // Initialize update state for gap-filling.
+      // GramJS's catchUp() is a no-op stub, so we manually track pts/qts/date
+      // and call updates.getDifference() to recover updates missed when another
+      // device (mobile/desktop) was the "last active" connection.
+      let updatePts = 0;
+      let updateQts = 0;
+      let updateDate = 0;
+      try {
+        const state = await client.invoke(new Api.updates.GetState());
+        updatePts = state.pts;
+        updateQts = state.qts;
+        updateDate = state.date;
+        runtime.error(
+          `[${account.accountId}] update state: pts=${updatePts} qts=${updateQts} date=${updateDate}`,
+        );
+      } catch {
+        // non-fatal: polling will still work without initial state
+      }
+
+      // Periodic keep-alive + gap-fill: call updates.getDifference() to both
+      // maintain "last active" status and recover any missed messages.
+      // Telegram only pushes updates to the most recently active connection;
+      // getDifference() fetches updates that went to other sessions.
+      keepAliveTimer = setInterval(async () => {
         if (!client || stopped) {
           return;
         }
-        client.getMe().catch(() => {
+        try {
+          if (updatePts > 0) {
+            const diff = await client.invoke(
+              new Api.updates.GetDifference({
+                pts: updatePts,
+                date: updateDate,
+                qts: updateQts,
+              }),
+            );
+            if (diff instanceof Api.updates.Difference) {
+              updatePts = diff.state.pts;
+              updateQts = diff.state.qts;
+              updateDate = diff.state.date;
+              // Feed recovered updates back into GramJS event handler pipeline
+              if (diff.newMessages.length > 0 || diff.otherUpdates.length > 0) {
+                runtime.error(
+                  `[${account.accountId}] getDifference: ${diff.newMessages.length} messages, ${diff.otherUpdates.length} other updates`,
+                );
+                // Dispatch new messages as UpdateNewMessage so event handlers fire
+                for (const msg of diff.newMessages) {
+                  if (msg instanceof Api.Message) {
+                    (client as unknown as { _handleUpdate: (u: unknown) => void })._handleUpdate(
+                      new Api.UpdateNewMessage({ message: msg, pts: 0, ptsCount: 0 }),
+                    );
+                  }
+                }
+              }
+            } else if (diff instanceof Api.updates.DifferenceSlice) {
+              updatePts = diff.intermediateState.pts;
+              updateQts = diff.intermediateState.qts;
+              updateDate = diff.intermediateState.date;
+              if (diff.newMessages.length > 0) {
+                runtime.error(
+                  `[${account.accountId}] getDifference (slice): ${diff.newMessages.length} messages`,
+                );
+                for (const msg of diff.newMessages) {
+                  if (msg instanceof Api.Message) {
+                    (client as unknown as { _handleUpdate: (u: unknown) => void })._handleUpdate(
+                      new Api.UpdateNewMessage({ message: msg, pts: 0, ptsCount: 0 }),
+                    );
+                  }
+                }
+              }
+            } else if (diff instanceof Api.updates.DifferenceTooLong) {
+              // State diverged too much — reset to current state
+              updatePts = diff.pts;
+              runtime.error(
+                `[${account.accountId}] getDifference: too long, resetting pts=${diff.pts}`,
+              );
+              const freshState = await client.invoke(new Api.updates.GetState());
+              updateQts = freshState.qts;
+              updateDate = freshState.date;
+            }
+            // DifferenceEmpty — no new updates, nothing to do
+          } else {
+            // No pts yet — just do a GetState to establish baseline and stay active
+            const state = await client.invoke(new Api.updates.GetState());
+            updatePts = state.pts;
+            updateQts = state.qts;
+            updateDate = state.date;
+          }
+        } catch {
           // ignore keep-alive errors; reconnect logic handles actual failures
-        });
+        }
       }, KEEP_ALIVE_INTERVAL_MS);
 
       logVerbose(

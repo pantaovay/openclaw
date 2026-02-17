@@ -21,7 +21,6 @@ export async function createTelegramUserClient(
   const stringSession = new StringSession(options.session);
   const client = new TelegramClient(stringSession, options.apiId, options.apiHash, {
     connectionRetries: 5,
-    useWSS: true,
   });
   return client;
 }
@@ -46,7 +45,6 @@ export async function interactiveLogin(params: {
   const stringSession = new StringSession("");
   const client = new TelegramClient(stringSession, params.apiId, params.apiHash, {
     connectionRetries: 5,
-    useWSS: true,
   });
 
   await client.start({
