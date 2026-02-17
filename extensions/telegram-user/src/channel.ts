@@ -449,6 +449,9 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
       }
     },
     sendMedia: async ({ to, text, mediaUrl, accountId, cfg }) => {
+      if (!mediaUrl) {
+        return { channel: "telegram-user" as const, ok: false, messageId: "", error: new Error("mediaUrl is required") };
+      }
       const account = resolveTelegramUserAccountSync({ cfg, accountId });
       const pool = getClientPool();
       const client = await pool.acquire({
@@ -457,7 +460,7 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
         session: account.session,
       });
       try {
-        const result = await sendFileMessage(client, to, mediaUrl ?? "", text);
+        const result = await sendFileMessage(client, to, mediaUrl, text);
         return {
           channel: "telegram-user",
           ok: result.ok,

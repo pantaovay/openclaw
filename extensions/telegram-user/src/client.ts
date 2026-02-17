@@ -15,12 +15,6 @@ export type TelegramUserSendResult = {
   error?: string;
 };
 
-let activeClient: TelegramClient | null = null;
-
-export function getActiveClient(): TelegramClient | null {
-  return activeClient;
-}
-
 export async function createTelegramUserClient(
   options: TelegramUserClientOptions,
 ): Promise<TelegramClient> {
@@ -33,17 +27,10 @@ export async function createTelegramUserClient(
 
 export async function connectClient(client: TelegramClient): Promise<void> {
   await client.connect();
-  activeClient = client;
 }
 
 export async function disconnectClient(client: TelegramClient): Promise<void> {
-  try {
-    await client.disconnect();
-  } finally {
-    if (activeClient === client) {
-      activeClient = null;
-    }
-  }
+  await client.disconnect();
 }
 
 export async function interactiveLogin(params: {
@@ -103,7 +90,7 @@ function extractSenderInfo(message: Api.Message): {
   if (sender instanceof Api.Channel || sender instanceof Api.Chat) {
     return {
       senderId: String(sender.id),
-      senderName: (sender as Api.Channel).title ?? "Unknown",
+      senderName: sender.title ?? "Unknown",
     };
   }
 

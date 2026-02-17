@@ -23,6 +23,52 @@ import { getTelegramUserRuntime } from "./runtime.js";
 
 const channel = "telegram-user" as const;
 
+async function copyTemplatesToStateDir(prompter: WizardPrompter): Promise<void> {
+  try {
+    const { resolve, dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const { existsSync, copyFileSync, mkdirSync } = await import("node:fs");
+
+    const core = getTelegramUserRuntime();
+    const stateDir = core.state.resolveStateDir();
+    const targetDir = resolve(stateDir, "telegram-user");
+
+    const pluginDir = dirname(fileURLToPath(import.meta.url));
+    const templatesDir = resolve(pluginDir, "..", "templates");
+
+    if (!existsSync(templatesDir)) {
+      return;
+    }
+
+    mkdirSync(targetDir, { recursive: true });
+
+    const files = ["SOUL.md", "HEARTBEAT.md"];
+    const copied: string[] = [];
+    for (const file of files) {
+      const src = join(templatesDir, file);
+      const dest = join(targetDir, file);
+      if (existsSync(src) && !existsSync(dest)) {
+        copyFileSync(src, dest);
+        copied.push(dest);
+      }
+    }
+
+    if (copied.length > 0) {
+      await prompter.note(
+        [
+          "Template files copied to your config directory:",
+          ...copied.map((p) => `  ${p}`),
+          "",
+          "Edit these files to customize your assistant's personality and periodic tasks.",
+        ].join("\n"),
+        "Templates",
+      );
+    }
+  } catch {
+    // Non-critical; silently skip if copy fails
+  }
+}
+
 function setDmPolicy(
   cfg: OpenClawConfig,
   dmPolicy: "pairing" | "allowlist" | "open" | "disabled",
@@ -227,7 +273,7 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
   allowFromKey: "channels.telegram-user.allowFrom",
   getCurrent: (cfg) =>
     ((cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined)?.dmPolicy ??
-      "pairing") as "pairing",
+      "pairing") as "pairing" | "allowlist" | "open" | "disabled",
   setPolicy: (cfg, policy) => setDmPolicy(cfg, policy),
   promptAllowFrom: async ({ cfg, prompter, accountId }) => {
     const id =
@@ -372,6 +418,7 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
 
           await core.config.writeConfigFile(next);
           await prompter.note("Login successful! Session saved.", "Success");
+          await copyTemplatesToStateDir(prompter);
         } catch (err) {
           await prompter.note(
             `Login failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -445,6 +492,7 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
           } as OpenClawConfig;
           await core.config.writeConfigFile(next);
           await prompter.note("Re-login successful! Session saved.", "Success");
+          await copyTemplatesToStateDir(prompter);
         } catch (err) {
           await prompter.note(
             `Login failed: ${err instanceof Error ? err.message : String(err)}`,

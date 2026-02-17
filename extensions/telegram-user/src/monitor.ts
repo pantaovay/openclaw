@@ -11,6 +11,7 @@ import {
   getSelfInfo,
   setupMessageListener,
   sendTextMessage,
+  sendFileMessage,
 } from "./client.js";
 import type { ResolvedTelegramUserAccount, TelegramUserMessage } from "./types.js";
 import type { TelegramClient } from "telegram";
@@ -28,10 +29,6 @@ export type TelegramUserMonitorResult = {
 };
 
 const TELEGRAM_TEXT_LIMIT = 4096;
-
-function normalizeTelegramUserEntry(entry: string): string {
-  return entry.replace(/^(telegram-user|telegram|tgu|tg):/i, "").trim();
-}
 
 type TelegramUserCoreRuntime = ReturnType<typeof getTelegramUserRuntime>;
 
@@ -196,6 +193,8 @@ async function processMessage(
     return;
   }
 
+  // Use "group" kind for both branches to avoid dmScope=main collapsing all DMs
+  // into the main session. This ensures each DM sender gets their own session.
   const peer = isGroup
     ? { kind: "group" as const, id: chatId }
     : { kind: "group" as const, id: senderId };
@@ -325,7 +324,6 @@ async function deliverTelegramUserReply(params: {
       : [];
 
   if (mediaList.length > 0) {
-    const { sendFileMessage } = await import("./client.js");
     let first = true;
     for (const mediaUrl of mediaList) {
       const caption = first ? text : undefined;
