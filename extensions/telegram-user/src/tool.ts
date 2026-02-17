@@ -1,6 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { TelegramClient, Api } from "telegram";
-import { resolveTelegramUserAccountSync, isAccountConfigured } from "./accounts.js";
+import {
+  resolveDefaultTelegramUserAccountId,
+  resolveTelegramUserAccountSync,
+  isAccountConfigured,
+} from "./accounts.js";
 import { getSelfInfo } from "./client.js";
 import { getClientPool } from "./pool.js";
 import { getTelegramUserRuntime } from "./runtime.js";
@@ -58,7 +62,8 @@ function json(payload: unknown): AgentToolResult {
 async function withClient<T>(fn: (client: TelegramClient) => Promise<T>): Promise<T> {
   const core = getTelegramUserRuntime();
   const cfg = core.config.loadConfig();
-  const account = resolveTelegramUserAccountSync({ cfg });
+  const accountId = resolveDefaultTelegramUserAccountId(cfg);
+  const account = resolveTelegramUserAccountSync({ cfg, accountId });
   if (!isAccountConfigured(account)) {
     throw new Error(
       "Telegram User not configured. Run: openclaw channels login --channel telegram-user",

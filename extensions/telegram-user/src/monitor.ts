@@ -35,14 +35,22 @@ function logVerbose(core: TelegramUserCoreRuntime, runtime: RuntimeEnv, message:
   }
 }
 
-function isSenderAllowed(senderId: string, allowFrom: string[]): boolean {
+function isSenderAllowed(senderId: string, allowFrom: string[], senderUsername?: string): boolean {
   if (allowFrom.includes("*")) {
     return true;
   }
   const normalizedSenderId = senderId.toLowerCase();
+  const normalizedUsername = senderUsername?.toLowerCase();
   return allowFrom.some((entry) => {
     const normalized = entry.toLowerCase().replace(/^(telegram-user|telegram|tgu|tg):/i, "");
-    return normalized === normalizedSenderId;
+    if (normalized === normalizedSenderId) {
+      return true;
+    }
+    // Also match by username (onboarding stores usernames without @)
+    if (normalizedUsername && normalized === normalizedUsername) {
+      return true;
+    }
+    return false;
   });
 }
 
@@ -82,7 +90,17 @@ async function processMessage(
   client: TelegramClient,
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void,
 ): Promise<void> {
-  const { chatId, text, timestamp, senderId, senderName, isGroup, isChannel, groupName } = message;
+  const {
+    chatId,
+    text,
+    timestamp,
+    senderId,
+    senderName,
+    senderUsername,
+    isGroup,
+    isChannel,
+    groupName,
+  } = message;
   if (!text?.trim()) {
     return;
   }
@@ -120,7 +138,7 @@ async function processMessage(
     dmPolicy,
     configuredAllowFrom: configAllowFrom,
     senderId,
-    isSenderAllowed,
+    isSenderAllowed: (sid, af) => isSenderAllowed(sid, af, senderUsername),
     readAllowFromStore: () => core.channel.pairing.readAllowFromStore("telegram-user"),
     shouldComputeCommandAuthorized: (body, cfg) =>
       core.channel.commands.shouldComputeCommandAuthorized(body, cfg),
@@ -153,8 +171,10 @@ async function processMessage(
                 idLine: `Your Telegram user id: ${senderId}`,
                 code,
               });
-              await sendTextMessage(client, chatId, pairingReply);
-              statusSink?.({ lastOutboundAt: Date.now() });
+              const pairingResult = await sendTextMessage(client, chatId, pairingReply);
+              if (pairingResult.ok) {
+                statusSink?.({ lastOutboundAt: Date.now() });
+              }
             } catch (err) {
               logVerbose(
                 core,
@@ -323,8 +343,12 @@ async function deliverTelegramUserReply(params: {
       first = false;
       try {
         logVerbose(core, runtime, `Sending media to ${chatId}`);
-        await sendFileMessage(client, chatId, mediaUrl, caption);
-        statusSink?.({ lastOutboundAt: Date.now() });
+        const result = await sendFileMessage(client, chatId, mediaUrl, caption);
+        if (result.ok) {
+          statusSink?.({ lastOutboundAt: Date.now() });
+        } else {
+          runtime.error(`Telegram User media send failed: ${result.error}`);
+        }
       } catch (err) {
         runtime.error(`Telegram User media send failed: ${String(err)}`);
       }
@@ -342,8 +366,12 @@ async function deliverTelegramUserReply(params: {
     logVerbose(core, runtime, `Sending ${chunks.length} text chunk(s) to ${chatId}`);
     for (const chunk of chunks) {
       try {
-        await sendTextMessage(client, chatId, chunk);
-        statusSink?.({ lastOutboundAt: Date.now() });
+        const result = await sendTextMessage(client, chatId, chunk);
+        if (result.ok) {
+          statusSink?.({ lastOutboundAt: Date.now() });
+        } else {
+          runtime.error(`Telegram User message send failed: ${result.error}`);
+        }
       } catch (err) {
         runtime.error(`Telegram User message send failed: ${String(err)}`);
       }
@@ -410,6 +438,11 @@ export async function monitorTelegramUserProvider(
       });
     } catch (err) {
       runtime.error(`[${account.accountId}] GramJS connection error: ${String(err)}`);
+      // Clean up the failed client to prevent connection leaks
+      if (client) {
+        disconnectClient(client).catch(() => {});
+        client = null;
+      }
       if (!stopped && !abortSignal.aborted) {
         logVerbose(core, runtime, `[${account.accountId}] reconnecting in 10s...`);
         restartTimer = setTimeout(() => {

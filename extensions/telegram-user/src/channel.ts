@@ -367,7 +367,7 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
         try {
           const account = resolveTelegramUserAccountSync({
             cfg,
-            accountId: accountId ?? DEFAULT_ACCOUNT_ID,
+            accountId: accountId ?? resolveDefaultTelegramUserAccountId(cfg),
           });
           if (!isAccountConfigured(account)) {
             results.push({ input, resolved: false, note: "not configured" });
@@ -410,7 +410,8 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
     idLabel: "telegramUserId",
     normalizeAllowEntry: (entry) => entry.replace(/^(telegram-user|telegram|tgu|tg):/i, ""),
     notifyApproval: async ({ cfg, id }) => {
-      const account = resolveTelegramUserAccountSync({ cfg });
+      const accountId = resolveDefaultTelegramUserAccountId(cfg);
+      const account = resolveTelegramUserAccountSync({ cfg, accountId });
       if (!isAccountConfigured(account)) {
         throw new Error("Telegram User not configured");
       }
