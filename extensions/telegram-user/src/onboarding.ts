@@ -367,6 +367,12 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
       }
     }
 
+    // Ensure allowFrom wildcard is set when dmPolicy is "open"
+    const finalAccount = resolveTelegramUserAccountSync({ cfg: next, accountId });
+    if (finalAccount.config.dmPolicy === "open") {
+      next = setDmPolicy(next, "open");
+    }
+
     return { cfg: next, accountId };
   },
 };
