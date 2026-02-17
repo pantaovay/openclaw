@@ -28,9 +28,9 @@ async function copyTemplatesToStateDir(prompter: WizardPrompter): Promise<void> 
     const { resolve, dirname, join } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
     const { existsSync, copyFileSync, mkdirSync } = await import("node:fs");
+    const { homedir } = await import("node:os");
 
-    const core = getTelegramUserRuntime();
-    const stateDir = core.state.resolveStateDir();
+    const stateDir = resolve(homedir(), ".openclaw");
     const targetDir = resolve(stateDir, "telegram-user");
 
     const pluginDir = dirname(fileURLToPath(import.meta.url));
