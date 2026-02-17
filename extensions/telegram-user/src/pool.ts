@@ -18,7 +18,7 @@ const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const POOL_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 
 function makeKey(opts: PoolClientOptions): string {
-  return `${opts.apiId}:${opts.apiHash.slice(0, 8)}:${opts.session.slice(0, 16)}`;
+  return `${opts.apiId}:${opts.apiHash}:${opts.session}`;
 }
 
 class TelegramClientPool {

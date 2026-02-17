@@ -33,6 +33,10 @@ export async function disconnectClient(client: TelegramClient): Promise<void> {
   await client.disconnect();
 }
 
+export async function destroyClient(client: TelegramClient): Promise<void> {
+  await client.destroy();
+}
+
 export async function interactiveLogin(params: {
   apiId: number;
   apiHash: string;

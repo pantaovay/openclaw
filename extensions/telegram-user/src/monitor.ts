@@ -5,6 +5,7 @@ import {
   createTelegramUserClient,
   connectClient,
   disconnectClient,
+  destroyClient,
   getSelfInfo,
   setupMessageListener,
   sendTextMessage,
@@ -397,7 +398,7 @@ export async function monitorTelegramUserProvider(
       restartTimer = null;
     }
     if (client) {
-      disconnectClient(client).catch((err) => {
+      destroyClient(client).catch((err) => {
         runtime.error(`[${account.accountId}] disconnect error: ${String(err)}`);
       });
       client = null;
@@ -430,9 +431,12 @@ export async function monitorTelegramUserProvider(
       );
 
       setupMessageListener(client, self.userId, (msg) => {
+        if (!client) {
+          return; // client torn down between event queue and handler execution
+        }
         logVerbose(core, runtime, `[${account.accountId}] inbound message from ${msg.senderId}`);
         statusSink?.({ lastInboundAt: Date.now() });
-        processMessage(msg, account, config, core, runtime, client!, statusSink).catch((err) => {
+        processMessage(msg, account, config, core, runtime, client, statusSink).catch((err) => {
           runtime.error(`[${account.accountId}] Failed to process message: ${String(err)}`);
         });
       });
@@ -461,8 +465,7 @@ export async function monitorTelegramUserProvider(
     abortSignal.addEventListener(
       "abort",
       () => {
-        stop();
-        resolve();
+        stop(); // stop() calls resolveRunning() which resolves this promise
       },
       { once: true },
     );

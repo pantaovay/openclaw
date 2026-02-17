@@ -52,6 +52,18 @@ type ToolParams = {
   query?: string;
 };
 
+const MAX_LIMIT = 200;
+
+function clampLimit(value: number | undefined, fallback: number): number {
+  return Math.min(Math.max(value ?? fallback, 1), MAX_LIMIT);
+}
+
+function sanitizeErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  // Strip phone numbers and overly-specific Telegram internals
+  return raw.replace(/\+?\d{7,15}/g, "[REDACTED]");
+}
+
 function json(payload: unknown): AgentToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
@@ -119,7 +131,7 @@ export async function executeTelegramUserTool(
         if (!params.chatId) {
           throw new Error("chatId required for history action");
         }
-        const limit = params.limit ?? 20;
+        const limit = clampLimit(params.limit, 20);
         return await withClient(async (client) => {
           const messages = await client.getMessages(params.chatId!, {
             limit,
@@ -132,7 +144,7 @@ export async function executeTelegramUserTool(
         if (!params.query) {
           throw new Error("query required for search action");
         }
-        const limit = params.limit ?? 20;
+        const limit = clampLimit(params.limit, 20);
         return await withClient(async (client) => {
           if (params.chatId) {
             // Search within a specific chat
@@ -164,7 +176,7 @@ export async function executeTelegramUserTool(
       }
 
       case "contacts": {
-        const limit = params.limit ?? 50;
+        const limit = clampLimit(params.limit, 50);
         return await withClient(async (client) => {
           const dialogs = await client.getDialogs({ limit });
           const contacts = dialogs
@@ -186,7 +198,7 @@ export async function executeTelegramUserTool(
       }
 
       case "dialogs": {
-        const limit = params.limit ?? 30;
+        const limit = clampLimit(params.limit, 30);
         return await withClient(async (client) => {
           const dialogs = await client.getDialogs({ limit });
           return json(
@@ -219,7 +231,7 @@ export async function executeTelegramUserTool(
         } catch (err) {
           return json({
             connected: false,
-            error: err instanceof Error ? err.message : String(err),
+            error: sanitizeErrorMessage(err),
           });
         }
       }
@@ -231,7 +243,7 @@ export async function executeTelegramUserTool(
     }
   } catch (err) {
     return json({
-      error: err instanceof Error ? err.message : String(err),
+      error: sanitizeErrorMessage(err),
     });
   }
 }
