@@ -40,7 +40,7 @@ import {
 } from "./client.js";
 import { TelegramUserConfigSchema } from "./config-schema.js";
 import { telegramUserOnboardingAdapter } from "./onboarding.js";
-import { getClientPool } from "./pool.js";
+import { getClientPool, destroyClientPool } from "./pool.js";
 import { getTelegramUserRuntime } from "./runtime.js";
 import { collectTelegramUserStatusIssues } from "./status-issues.js";
 import type { ResolvedTelegramUserAccount, TelegramUserSelfInfo } from "./types.js";
@@ -672,7 +672,9 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
             userLabel = ` (${self.firstName ?? ""}${self.username ? ` @${self.username}` : ""})`;
           }
         } finally {
-          pool.release(client);
+          // Destroy the probe client so it doesn't compete with the monitor's
+          // dedicated client for MTProto updates.
+          await destroyClientPool();
         }
       } catch {
         // ignore probe errors
