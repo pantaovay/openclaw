@@ -63,6 +63,7 @@ class TelegramClientPool {
     const stringSession = new StringSession(opts.session);
     const client = new TelegramClient(stringSession, opts.apiId, opts.apiHash, {
       connectionRetries: 3,
+      useWSS: true,
     });
     await client.connect();
 
