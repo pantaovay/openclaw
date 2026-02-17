@@ -40,7 +40,7 @@ import {
 } from "./client.js";
 import { TelegramUserConfigSchema } from "./config-schema.js";
 import { telegramUserOnboardingAdapter } from "./onboarding.js";
-import { getClientPool, destroyClientPool } from "./pool.js";
+import { getClientPool } from "./pool.js";
 import { getTelegramUserRuntime } from "./runtime.js";
 import { collectTelegramUserStatusIssues } from "./status-issues.js";
 import type { ResolvedTelegramUserAccount, TelegramUserSelfInfo } from "./types.js";
@@ -658,28 +658,10 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
   gateway: {
     startAccount: async (ctx) => {
       const account = ctx.account;
-      let userLabel = "";
-      try {
-        const pool = getClientPool();
-        const client = await pool.acquire({
-          apiId: account.apiId,
-          apiHash: account.apiHash,
-          session: account.session,
-        });
-        try {
-          const self = await getSelfInfo(client);
-          if (self.firstName || self.username) {
-            userLabel = ` (${self.firstName ?? ""}${self.username ? ` @${self.username}` : ""})`;
-          }
-        } finally {
-          // Destroy the probe client so it doesn't compete with the monitor's
-          // dedicated client for MTProto updates.
-          await destroyClientPool();
-        }
-      } catch {
-        // ignore probe errors
-      }
-      ctx.log?.info(`[${account.accountId}] starting telegram-user provider${userLabel}`);
+      // Skip the probe connection — monitor will log user info after connecting.
+      // A separate probe client competes with the monitor's client for MTProto
+      // updates, causing the event handler to never receive messages.
+      ctx.log?.info(`[${account.accountId}] starting telegram-user provider`);
       const { monitorTelegramUserProvider } = await import("./monitor.js");
       return monitorTelegramUserProvider({
         account,
