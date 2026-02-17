@@ -28,7 +28,11 @@ class TelegramClientPool {
   constructor() {
     this.cleanupTimer = setInterval(() => this.cleanup(), POOL_CHECK_INTERVAL_MS);
     // Allow the process to exit even if the timer is running
-    if (this.cleanupTimer && typeof this.cleanupTimer === "object" && "unref" in this.cleanupTimer) {
+    if (
+      this.cleanupTimer &&
+      typeof this.cleanupTimer === "object" &&
+      "unref" in this.cleanupTimer
+    ) {
       this.cleanupTimer.unref();
     }
   }
@@ -96,9 +100,7 @@ class TelegramClientPool {
 
   private cleanup(): void {
     const now = Date.now();
-    const stale = this.entries.filter(
-      (e) => !e.inUse && now - e.lastUsed > IDLE_TIMEOUT_MS,
-    );
+    const stale = this.entries.filter((e) => !e.inUse && now - e.lastUsed > IDLE_TIMEOUT_MS);
     for (const entry of stale) {
       this.remove(entry);
     }
@@ -111,9 +113,7 @@ class TelegramClientPool {
     }
     const all = [...this.entries];
     this.entries = [];
-    await Promise.allSettled(
-      all.map((e) => e.client.disconnect().catch(() => {})),
-    );
+    await Promise.allSettled(all.map((e) => e.client.disconnect().catch(() => {})));
   }
 
   get size(): number {

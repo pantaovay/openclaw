@@ -79,8 +79,7 @@ export function collectTelegramUserStatusIssues(
         channel: "telegram-user",
         accountId,
         kind: "config",
-        message:
-          'Telegram User dmPolicy is "open", allowing any user to message without pairing.',
+        message: 'Telegram User dmPolicy is "open", allowing any user to message without pairing.',
         fix: 'Set channels.telegram-user.dmPolicy to "pairing" or "allowlist" to restrict access.',
       });
     }

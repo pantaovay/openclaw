@@ -76,28 +76,28 @@ Configuration lives in your OpenClaw config file (`~/.openclaw/openclaw.json`):
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `TELEGRAM_API_ID` | Telegram API ID (fallback if not in config) |
-| `TELEGRAM_API_HASH` | Telegram API Hash (fallback if not in config) |
-| `TELEGRAM_USER_SESSION` | Session string (fallback if not in config) |
+| Variable                | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `TELEGRAM_API_ID`       | Telegram API ID (fallback if not in config)   |
+| `TELEGRAM_API_HASH`     | Telegram API Hash (fallback if not in config) |
+| `TELEGRAM_USER_SESSION` | Session string (fallback if not in config)    |
 
 ### DM Policy Options
 
-| Policy | Behavior |
-|--------|----------|
+| Policy              | Behavior                                                                    |
+| ------------------- | --------------------------------------------------------------------------- |
 | `pairing` (default) | Unknown senders get a pairing code; approve with `openclaw pairing approve` |
-| `allowlist` | Only senders in `allowFrom` list can message |
-| `open` | Anyone can message (use with caution) |
-| `disabled` | All DMs are ignored |
+| `allowlist`         | Only senders in `allowFrom` list can message                                |
+| `open`              | Anyone can message (use with caution)                                       |
+| `disabled`          | All DMs are ignored                                                         |
 
 ### Group Policy Options
 
-| Policy | Behavior |
-|--------|----------|
-| `open` (default) | Respond in all groups |
-| `allowlist` | Only respond in groups listed in `groups` config |
-| `disabled` | Ignore all group messages |
+| Policy           | Behavior                                         |
+| ---------------- | ------------------------------------------------ |
+| `open` (default) | Respond in all groups                            |
+| `allowlist`      | Only respond in groups listed in `groups` config |
+| `disabled`       | Ignore all group messages                        |
 
 ## Multi-Account Support
 
@@ -128,15 +128,15 @@ Configuration lives in your OpenClaw config file (`~/.openclaw/openclaw.json`):
 
 The agent tool provides 7 actions:
 
-| Action | Description | Required Params |
-|--------|-------------|-----------------|
-| `send` | Send a text message | `chatId`, `message` |
-| `history` | Read chat history | `chatId` |
-| `contacts` | List DM contacts | — |
-| `dialogs` | List all chats (DMs, groups, channels) | — |
-| `search` | Search messages globally or in a chat | `query` |
-| `me` | Get authenticated user info | — |
-| `status` | Check connection status | — |
+| Action     | Description                            | Required Params     |
+| ---------- | -------------------------------------- | ------------------- |
+| `send`     | Send a text message                    | `chatId`, `message` |
+| `history`  | Read chat history                      | `chatId`            |
+| `contacts` | List DM contacts                       | —                   |
+| `dialogs`  | List all chats (DMs, groups, channels) | —                   |
+| `search`   | Search messages globally or in a chat  | `query`             |
+| `me`       | Get authenticated user info            | —                   |
+| `status`   | Check connection status                | —                   |
 
 ## Templates
 

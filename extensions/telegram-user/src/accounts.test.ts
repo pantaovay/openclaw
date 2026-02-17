@@ -1,3 +1,4 @@
+import type { OpenClawConfig } from "openclaw/plugin-sdk";
 import { describe, expect, it, afterEach, vi } from "vitest";
 import {
   listTelegramUserAccountIds,
@@ -5,7 +6,6 @@ import {
   resolveTelegramUserAccountSync,
   isAccountConfigured,
 } from "./accounts.js";
-import type { OpenClawConfig } from "openclaw/plugin-sdk";
 
 const EMPTY_CFG = {} as OpenClawConfig;
 

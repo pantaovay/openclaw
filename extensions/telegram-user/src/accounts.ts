@@ -34,10 +34,7 @@ export function resolveDefaultTelegramUserAccountId(cfg: OpenClawConfig): string
   return ids[0] ?? DEFAULT_ACCOUNT_ID;
 }
 
-function mergeAccountConfig(
-  cfg: OpenClawConfig,
-  accountId: string,
-): TelegramUserAccountConfig {
+function mergeAccountConfig(cfg: OpenClawConfig, accountId: string): TelegramUserAccountConfig {
   const raw = (cfg.channels?.["telegram-user"] ?? {}) as TelegramUserConfig;
   const { accounts: _ignored, defaultAccount: _ignored2, ...base } = raw;
   const account =
@@ -47,9 +44,10 @@ function mergeAccountConfig(
   return { ...base, ...account };
 }
 
-function resolveApiCredentials(
-  config: TelegramUserAccountConfig,
-): { apiId: number; apiHash: string } {
+function resolveApiCredentials(config: TelegramUserAccountConfig): {
+  apiId: number;
+  apiHash: string;
+} {
   const envApiId = process.env.TELEGRAM_API_ID?.trim();
   const envApiHash = process.env.TELEGRAM_API_HASH?.trim();
   const apiId = config.apiId ?? (envApiId ? Number(envApiId) : 0);

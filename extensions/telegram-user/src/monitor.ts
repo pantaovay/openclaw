@@ -1,9 +1,6 @@
 import type { OpenClawConfig, MarkdownTableMode, RuntimeEnv } from "openclaw/plugin-sdk";
-import {
-  createReplyPrefixOptions,
-  resolveSenderCommandAuthorization,
-} from "openclaw/plugin-sdk";
-import { getTelegramUserRuntime } from "./runtime.js";
+import { createReplyPrefixOptions, resolveSenderCommandAuthorization } from "openclaw/plugin-sdk";
+import type { TelegramClient } from "telegram";
 import {
   createTelegramUserClient,
   connectClient,
@@ -13,8 +10,8 @@ import {
   sendTextMessage,
   sendFileMessage,
 } from "./client.js";
+import { getTelegramUserRuntime } from "./runtime.js";
 import type { ResolvedTelegramUserAccount, TelegramUserMessage } from "./types.js";
-import type { TelegramClient } from "telegram";
 
 export type TelegramUserMonitorOptions = {
   account: ResolvedTelegramUserAccount;
@@ -59,11 +56,9 @@ function isGroupAllowed(params: {
   if (keys.length === 0) {
     return false;
   }
-  const candidates = [
-    params.groupId,
-    `group:${params.groupId}`,
-    params.groupName ?? "",
-  ].filter(Boolean);
+  const candidates = [params.groupId, `group:${params.groupId}`, params.groupName ?? ""].filter(
+    Boolean,
+  );
   for (const candidate of candidates) {
     const entry = groups[candidate];
     if (!entry) {
@@ -209,9 +204,7 @@ async function processMessage(
     },
   });
 
-  const fromLabel = isGroup
-    ? `group:${groupName || chatId}`
-    : senderName || `user:${senderId}`;
+  const fromLabel = isGroup ? `group:${groupName || chatId}` : senderName || `user:${senderId}`;
   const storePath = core.channel.session.resolveStorePath(config.session?.store, {
     agentId: route.agentId,
   });
@@ -391,11 +384,7 @@ export async function monitorTelegramUserProvider(
     }
 
     try {
-      logVerbose(
-        core,
-        runtime,
-        `[${account.accountId}] starting GramJS client (MTProto)`,
-      );
+      logVerbose(core, runtime, `[${account.accountId}] starting GramJS client (MTProto)`);
 
       client = await createTelegramUserClient({
         apiId: account.apiId,
@@ -436,10 +425,14 @@ export async function monitorTelegramUserProvider(
 
   const runningPromise = new Promise<void>((resolve) => {
     resolveRunning = resolve;
-    abortSignal.addEventListener("abort", () => {
-      stop();
-      resolve();
-    }, { once: true });
+    abortSignal.addEventListener(
+      "abort",
+      () => {
+        stop();
+        resolve();
+      },
+      { once: true },
+    );
   });
 
   await startListener();
