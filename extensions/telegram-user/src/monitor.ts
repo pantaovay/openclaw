@@ -424,6 +424,13 @@ export async function monitorTelegramUserProvider(
       await connectClient(client);
       const self = await getSelfInfo(client);
 
+      // Fetch dialogs to populate GramJS entity cache, required for NewMessage events
+      try {
+        await client.getDialogs({ limit: 1 });
+      } catch {
+        // non-fatal: listener may still work for known entities
+      }
+
       logVerbose(
         core,
         runtime,

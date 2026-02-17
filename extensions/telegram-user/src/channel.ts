@@ -460,7 +460,13 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
           ...cfg,
           channels: {
             ...cfg.channels,
-            "telegram-user": { ...tguBase, enabled: true, session },
+            "telegram-user": {
+              ...tguBase,
+              enabled: true,
+              apiId: account.apiId,
+              apiHash: account.apiHash,
+              session,
+            },
           },
         } as OpenClawConfig;
       } else {
@@ -477,6 +483,8 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
                 [resolvedId]: {
                   ...(accounts[resolvedId] as Record<string, unknown> | undefined),
                   enabled: true,
+                  apiId: account.apiId,
+                  apiHash: account.apiHash,
                   session,
                 },
               },
