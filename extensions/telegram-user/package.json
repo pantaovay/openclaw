@@ -1,0 +1,37 @@
+{
+  "name": "@openclaw/telegram-user",
+  "version": "2026.2.17",
+  "description": "OpenClaw Telegram User Mode plugin via GramJS (MTProto)",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48",
+    "telegram": "^2.26.22",
+    "input": "^1.0.1"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "telegram-user",
+      "label": "Telegram Personal",
+      "selectionLabel": "Telegram (Personal Account)",
+      "docsPath": "/channels/telegram-user",
+      "docsLabel": "telegram-user",
+      "blurb": "Telegram personal account via MTProto user login.",
+      "aliases": [
+        "tgu"
+      ],
+      "order": 86,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@openclaw/telegram-user",
+      "localPath": "extensions/telegram-user",
+      "defaultChoice": "npm"
+    }
+  }
+}
