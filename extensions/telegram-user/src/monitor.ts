@@ -439,6 +439,12 @@ export async function monitorTelegramUserProvider(
       await connectClient(client);
       runtime.error(`[${account.accountId}] GramJS connected, registering event handler`);
 
+      // Debug: listen for ALL raw updates to verify GramJS receives anything
+      client.addEventHandler((update: unknown) => {
+        const name = update?.constructor?.name ?? typeof update;
+        runtime.error(`[${account.accountId}] raw update: ${name}`);
+      });
+
       // Register event handler BEFORE any high-level API calls (getMe/getDialogs).
       // GramJS must have the handler in place before Telegram's update stream is
       // initialized by a high-level request. We use a late-binding selfId so the
