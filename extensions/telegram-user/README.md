@@ -176,10 +176,25 @@ The `limit` parameter defaults to 20–50 depending on the action and is capped 
 
 The extension ships with template files in `templates/`:
 
-- **SOUL.md** — Agent personality and behavior guide
-- **HEARTBEAT.md** — Periodic maintenance task checklist
+- **SOUL.md** — Agent personality, tone, and behavior rules. Injected into the AI system prompt for every message.
+- **HEARTBEAT.md** — Periodic maintenance task checklist. Read by the AI during scheduled heartbeat cycles.
 
-These are automatically copied to `~/.openclaw/telegram-user/` on first login. Edit them to customize your assistant's personality and scheduled tasks.
+These are automatically copied to `~/.openclaw/telegram-user/` on first login. Edit the **copied files** (not the originals in `templates/`) to customize your assistant:
+
+```bash
+# Edit your agent's personality and rules
+$EDITOR ~/.openclaw/telegram-user/SOUL.md
+
+# Edit periodic task instructions
+$EDITOR ~/.openclaw/telegram-user/HEARTBEAT.md
+```
+
+Changes take effect on the next message or heartbeat cycle — no restart required.
+
+### What to customize
+
+- **SOUL.md**: Language rules, communication tone, response length, boundaries, what the agent can/cannot do
+- **HEARTBEAT.md**: Scheduled tasks like memory cleanup, calendar checks, daily summaries
 
 ## Testing
 
