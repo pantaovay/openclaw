@@ -1,5 +1,6 @@
 import type {
   ChannelAccountSnapshot,
+  ChannelDirectoryEntry,
   ChannelDock,
   ChannelPlugin,
   ChannelGroupContext,
@@ -26,6 +27,7 @@ import {
   isAccountConfigured,
 } from "./accounts.js";
 import { TelegramUserConfigSchema } from "./config-schema.js";
+import { telegramUserOnboardingAdapter } from "./onboarding.js";
 import { collectTelegramUserStatusIssues } from "./status-issues.js";
 import {
   createTelegramUserClient,
@@ -106,6 +108,7 @@ export const telegramUserDock: ChannelDock = {
 export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
   id: "telegram-user",
   meta,
+  onboarding: telegramUserOnboardingAdapter,
   capabilities: {
     chatTypes: ["direct", "group"],
     media: true,
@@ -208,6 +211,100 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
         return /^-?\d{3,}$/.test(trimmed);
       },
       hint: "<chatId>",
+    },
+  },
+  directory: {
+    self: async ({ cfg, accountId }) => {
+      const account = resolveTelegramUserAccountSync({ cfg, accountId });
+      if (!isAccountConfigured(account)) {
+        return null;
+      }
+      const pool = getClientPool();
+      const client = await pool.acquire({
+        apiId: account.apiId,
+        apiHash: account.apiHash,
+        session: account.session,
+      });
+      try {
+        const self = await getSelfInfo(client);
+        return {
+          kind: "user",
+          id: self.userId,
+          name: [self.firstName, self.lastName].filter(Boolean).join(" ") || undefined,
+        } as ChannelDirectoryEntry;
+      } finally {
+        pool.release(client);
+      }
+    },
+    listPeers: async ({ cfg, accountId, query, limit }) => {
+      const account = resolveTelegramUserAccountSync({ cfg, accountId });
+      if (!isAccountConfigured(account)) {
+        throw new Error("Telegram User not configured");
+      }
+      const pool = getClientPool();
+      const client = await pool.acquire({
+        apiId: account.apiId,
+        apiHash: account.apiHash,
+        session: account.session,
+      });
+      try {
+        const dialogs = await client.getDialogs({ limit: limit ?? 100 });
+        let peers = dialogs
+          .filter((d) => !d.isGroup && !d.isChannel)
+          .map(
+            (d) =>
+              ({
+                kind: "user",
+                id: String(d.id),
+                name: d.name ?? undefined,
+              }) as ChannelDirectoryEntry,
+          );
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          peers = peers.filter(
+            (p) =>
+              (p.name ?? "").toLowerCase().includes(q) || p.id.includes(q),
+          );
+        }
+        return typeof limit === "number" && limit > 0 ? peers.slice(0, limit) : peers;
+      } finally {
+        pool.release(client);
+      }
+    },
+    listGroups: async ({ cfg, accountId, query, limit }) => {
+      const account = resolveTelegramUserAccountSync({ cfg, accountId });
+      if (!isAccountConfigured(account)) {
+        throw new Error("Telegram User not configured");
+      }
+      const pool = getClientPool();
+      const client = await pool.acquire({
+        apiId: account.apiId,
+        apiHash: account.apiHash,
+        session: account.session,
+      });
+      try {
+        const dialogs = await client.getDialogs({ limit: limit ?? 100 });
+        let groups = dialogs
+          .filter((d) => d.isGroup || d.isChannel)
+          .map(
+            (d) =>
+              ({
+                kind: "group",
+                id: String(d.id),
+                name: d.name ?? undefined,
+              }) as ChannelDirectoryEntry,
+          );
+        if (query?.trim()) {
+          const q = query.trim().toLowerCase();
+          groups = groups.filter(
+            (g) =>
+              (g.name ?? "").toLowerCase().includes(q) || g.id.includes(q),
+          );
+        }
+        return typeof limit === "number" && limit > 0 ? groups.slice(0, limit) : groups;
+      } finally {
+        pool.release(client);
+      }
     },
   },
   pairing: {
