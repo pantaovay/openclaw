@@ -32,6 +32,7 @@ export type TelegramUserConfig = {
     string,
     { allow?: boolean; enabled?: boolean; tools?: { allow?: string[]; deny?: string[] } }
   >;
+  markdown?: { tableMode?: string };
   messagePrefix?: string;
   responsePrefix?: string;
   accounts?: Record<string, TelegramUserAccountConfig>;

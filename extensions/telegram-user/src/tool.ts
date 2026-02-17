@@ -1,19 +1,11 @@
 import { Type } from "@sinclair/typebox";
-import { getClientPool } from "./pool.js";
+import type { TelegramClient, Api } from "telegram";
 import { resolveTelegramUserAccountSync, isAccountConfigured } from "./accounts.js";
 import { getSelfInfo } from "./client.js";
+import { getClientPool } from "./pool.js";
 import { getTelegramUserRuntime } from "./runtime.js";
-import type { TelegramClient, Api } from "telegram";
 
-const ACTIONS = [
-  "send",
-  "history",
-  "contacts",
-  "dialogs",
-  "me",
-  "status",
-  "search",
-] as const;
+const ACTIONS = ["send", "history", "contacts", "dialogs", "me", "status", "search"] as const;
 
 type AgentToolResult = {
   content: Array<{ type: string; text: string }>;
@@ -40,12 +32,8 @@ export const TelegramUserToolSchema = Type.Object(
       Type.String({ description: "Chat/user ID or username for messaging and history" }),
     ),
     message: Type.Optional(Type.String({ description: "Message text to send" })),
-    replyToMsgId: Type.Optional(
-      Type.Number({ description: "Message ID to reply to" }),
-    ),
-    limit: Type.Optional(
-      Type.Number({ description: "Max results to return (default 20)" }),
-    ),
+    replyToMsgId: Type.Optional(Type.Number({ description: "Message ID to reply to" })),
+    limit: Type.Optional(Type.Number({ description: "Max results to return (default 20)" })),
     query: Type.Optional(Type.String({ description: "Search query for contacts or messages" })),
   },
   { additionalProperties: false },
@@ -69,10 +57,12 @@ function json(payload: unknown): AgentToolResult {
 
 async function withClient<T>(fn: (client: TelegramClient) => Promise<T>): Promise<T> {
   const core = getTelegramUserRuntime();
-  const cfg = core.config.readConfigFile();
+  const cfg = core.config.loadConfig();
   const account = resolveTelegramUserAccountSync({ cfg });
   if (!isAccountConfigured(account)) {
-    throw new Error("Telegram User not configured. Run: openclaw channels login --channel telegram-user");
+    throw new Error(
+      "Telegram User not configured. Run: openclaw channels login --channel telegram-user",
+    );
   }
   const pool = getClientPool();
   const client = await pool.acquire({
@@ -94,9 +84,7 @@ function formatMessage(msg: Api.Message): Record<string, unknown> {
     senderId: msg.senderId ? String(msg.senderId.toJSON()) : null,
     text: msg.text ?? "",
     replyToMsgId:
-      msg.replyTo && "replyToMsgId" in msg.replyTo
-        ? msg.replyTo.replyToMsgId
-        : undefined,
+      msg.replyTo && "replyToMsgId" in msg.replyTo ? msg.replyTo.replyToMsgId : undefined,
   };
 }
 
@@ -164,9 +152,7 @@ export async function executeTelegramUserTool(
             }),
           );
           if ("messages" in results) {
-            return json(
-              (results.messages as Api.Message[]).map(formatMessage),
-            );
+            return json((results.messages as Api.Message[]).map(formatMessage));
           }
           return json({ results: [] });
         });
@@ -187,10 +173,7 @@ export async function executeTelegramUserTool(
           if (params.query) {
             const q = params.query.toLowerCase();
             return json(
-              contacts.filter(
-                (c) =>
-                  c.name.toLowerCase().includes(q) || c.id.includes(q),
-              ),
+              contacts.filter((c) => c.name.toLowerCase().includes(q) || c.id.includes(q)),
             );
           }
           return json(contacts);
@@ -238,9 +221,7 @@ export async function executeTelegramUserTool(
 
       default: {
         params.action satisfies never;
-        throw new Error(
-          `Unknown action: ${String(params.action)}. Valid: ${ACTIONS.join(", ")}`,
-        );
+        throw new Error(`Unknown action: ${String(params.action)}. Valid: ${ACTIONS.join(", ")}`);
       }
     }
   } catch (err) {

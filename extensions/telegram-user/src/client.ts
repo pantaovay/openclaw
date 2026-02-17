@@ -1,6 +1,6 @@
 import { TelegramClient, Api } from "telegram";
-import { StringSession } from "telegram/sessions/index.js";
 import { NewMessage, type NewMessageEvent } from "telegram/events/index.js";
+import { StringSession } from "telegram/sessions/index.js";
 import type { TelegramUserMessage, TelegramUserSelfInfo } from "./types.js";
 
 export type TelegramUserClientOptions = {
@@ -102,59 +102,62 @@ export function setupMessageListener(
   selfId: string,
   onMessage: (msg: TelegramUserMessage) => void,
 ): void {
-  client.addEventHandler(async (event: NewMessageEvent) => {
-    const message = event.message;
-    if (!message || !message.text?.trim()) {
-      return;
-    }
-
-    // Skip messages from self
-    const fromId = String(message.senderId?.toJSON() ?? "");
-    if (fromId === selfId) {
-      return;
-    }
-
-    await message.getChat();
-    await message.getSender();
-
-    const chat = message.chat;
-    const isGroup =
-      chat instanceof Api.Chat ||
-      chat instanceof Api.ChatForbidden ||
-      (chat instanceof Api.Channel && chat.megagroup);
-    const isChannel = chat instanceof Api.Channel && !chat.megagroup;
-    const chatId = String(message.chatId ?? message.peerId?.toJSON());
-
-    const { senderId, senderName, senderUsername } = extractSenderInfo(message);
-
-    let groupName: string | undefined;
-    if (isGroup || isChannel) {
-      if (chat instanceof Api.Chat) {
-        groupName = chat.title;
-      } else if (chat instanceof Api.Channel) {
-        groupName = chat.title;
+  client.addEventHandler(
+    async (event: NewMessageEvent) => {
+      const message = event.message;
+      if (!message || !message.text?.trim()) {
+        return;
       }
-    }
 
-    const parsed: TelegramUserMessage = {
-      chatId,
-      messageId: message.id,
-      senderId,
-      senderName,
-      senderUsername,
-      text: message.text,
-      timestamp: message.date,
-      isGroup,
-      isChannel,
-      groupName,
-      replyToMsgId:
-        message.replyTo instanceof Api.MessageReplyHeader
-          ? message.replyTo.replyToMsgId
-          : undefined,
-    };
+      // Skip messages from self
+      const fromId = String(message.senderId?.toJSON() ?? "");
+      if (fromId === selfId) {
+        return;
+      }
 
-    onMessage(parsed);
-  }, new NewMessage({ incoming: true }));
+      await message.getChat();
+      await message.getSender();
+
+      const chat = message.chat;
+      const isGroup =
+        chat instanceof Api.Chat ||
+        chat instanceof Api.ChatForbidden ||
+        (chat instanceof Api.Channel && Boolean(chat.megagroup));
+      const isChannel = chat instanceof Api.Channel && !chat.megagroup;
+      const chatId = String(message.chatId ?? message.peerId?.toJSON());
+
+      const { senderId, senderName, senderUsername } = extractSenderInfo(message);
+
+      let groupName: string | undefined;
+      if (isGroup || isChannel) {
+        if (chat instanceof Api.Chat) {
+          groupName = chat.title;
+        } else if (chat instanceof Api.Channel) {
+          groupName = chat.title;
+        }
+      }
+
+      const parsed: TelegramUserMessage = {
+        chatId,
+        messageId: message.id,
+        senderId,
+        senderName,
+        senderUsername,
+        text: message.text,
+        timestamp: message.date,
+        isGroup,
+        isChannel,
+        groupName,
+        replyToMsgId:
+          message.replyTo instanceof Api.MessageReplyHeader
+            ? message.replyTo.replyToMsgId
+            : undefined,
+      };
+
+      onMessage(parsed);
+    },
+    new NewMessage({ incoming: true }),
+  );
 }
 
 export async function getSelfInfo(client: TelegramClient): Promise<TelegramUserSelfInfo> {

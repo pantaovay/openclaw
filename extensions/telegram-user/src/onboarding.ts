@@ -69,6 +69,46 @@ async function copyTemplatesToStateDir(prompter: WizardPrompter): Promise<void> 
   }
 }
 
+/**
+ * Upsert fields into the telegram-user channel config, handling both
+ * top-level (DEFAULT_ACCOUNT_ID) and per-account config placement.
+ */
+function upsertTelegramUserField(
+  cfg: OpenClawConfig,
+  accountId: string,
+  fields: Record<string, unknown>,
+): OpenClawConfig {
+  const tgu = (cfg.channels?.["telegram-user"] ?? {}) as Record<string, unknown>;
+  if (accountId === DEFAULT_ACCOUNT_ID) {
+    return {
+      ...cfg,
+      channels: {
+        ...cfg.channels,
+        "telegram-user": { ...tgu, enabled: true, ...fields },
+      },
+    } as OpenClawConfig;
+  }
+  const accounts = (tgu.accounts ?? {}) as Record<string, unknown>;
+  return {
+    ...cfg,
+    channels: {
+      ...cfg.channels,
+      "telegram-user": {
+        ...tgu,
+        enabled: true,
+        accounts: {
+          ...accounts,
+          [accountId]: {
+            ...(accounts[accountId] as Record<string, unknown> | undefined),
+            enabled: true,
+            ...fields,
+          },
+        },
+      },
+    },
+  } as OpenClawConfig;
+}
+
 function setDmPolicy(
   cfg: OpenClawConfig,
   dmPolicy: "pairing" | "allowlist" | "open" | "disabled",
@@ -136,48 +176,9 @@ async function promptAllowFrom(params: {
     if (parts.length === 0) {
       continue;
     }
-    // Clean up entries (strip @ prefix for usernames, keep numeric IDs as-is)
     const cleaned = parts.map((part) => part.replace(/^@/, ""));
     const unique = mergeAllowFromEntries(existingAllowFrom, cleaned);
-
-    if (accountId === DEFAULT_ACCOUNT_ID) {
-      return {
-        ...cfg,
-        channels: {
-          ...cfg.channels,
-          "telegram-user": {
-            ...(cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-            enabled: true,
-            dmPolicy: "allowlist",
-            allowFrom: unique,
-          },
-        },
-      } as OpenClawConfig;
-    }
-
-    return {
-      ...cfg,
-      channels: {
-        ...cfg.channels,
-        "telegram-user": {
-          ...(cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-          enabled: true,
-          accounts: {
-            ...((cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-              ?.accounts as Record<string, unknown> | undefined),
-            [accountId]: {
-              ...(
-                (cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                  ?.accounts as Record<string, Record<string, unknown>> | undefined
-              )?.[accountId],
-              enabled: true,
-              dmPolicy: "allowlist",
-              allowFrom: unique,
-            },
-          },
-        },
-      },
-    } as OpenClawConfig;
+    return upsertTelegramUserField(cfg, accountId, { dmPolicy: "allowlist", allowFrom: unique });
   }
 }
 
@@ -186,41 +187,7 @@ function setGroupPolicy(
   accountId: string,
   groupPolicy: "open" | "allowlist" | "disabled",
 ): OpenClawConfig {
-  if (accountId === DEFAULT_ACCOUNT_ID) {
-    return {
-      ...cfg,
-      channels: {
-        ...cfg.channels,
-        "telegram-user": {
-          ...(cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-          enabled: true,
-          groupPolicy,
-        },
-      },
-    } as OpenClawConfig;
-  }
-  return {
-    ...cfg,
-    channels: {
-      ...cfg.channels,
-      "telegram-user": {
-        ...(cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-        enabled: true,
-        accounts: {
-          ...((cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-            ?.accounts as Record<string, unknown> | undefined),
-          [accountId]: {
-            ...(
-              (cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                ?.accounts as Record<string, Record<string, unknown>> | undefined
-            )?.[accountId],
-            enabled: true,
-            groupPolicy,
-          },
-        },
-      },
-    },
-  } as OpenClawConfig;
+  return upsertTelegramUserField(cfg, accountId, { groupPolicy });
 }
 
 function setGroupAllowlist(
@@ -229,41 +196,7 @@ function setGroupAllowlist(
   groupKeys: string[],
 ): OpenClawConfig {
   const groups = Object.fromEntries(groupKeys.map((key) => [key, { allow: true }]));
-  if (accountId === DEFAULT_ACCOUNT_ID) {
-    return {
-      ...cfg,
-      channels: {
-        ...cfg.channels,
-        "telegram-user": {
-          ...(cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-          enabled: true,
-          groups,
-        },
-      },
-    } as OpenClawConfig;
-  }
-  return {
-    ...cfg,
-    channels: {
-      ...cfg.channels,
-      "telegram-user": {
-        ...(cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-        enabled: true,
-        accounts: {
-          ...((cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-            ?.accounts as Record<string, unknown> | undefined),
-          [accountId]: {
-            ...(
-              (cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                ?.accounts as Record<string, Record<string, unknown>> | undefined
-            )?.[accountId],
-            enabled: true,
-            groups,
-          },
-        },
-      },
-    },
-  } as OpenClawConfig;
+  return upsertTelegramUserField(cfg, accountId, { groups });
 }
 
 const dmPolicy: ChannelOnboardingDmPolicy = {
@@ -300,9 +233,7 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
     return {
       channel,
       configured,
-      statusLines: [
-        `Telegram Personal: ${configured ? "session active" : "needs MTProto login"}`,
-      ],
+      statusLines: [`Telegram Personal: ${configured ? "session active" : "needs MTProto login"}`],
       selectionHint: configured ? "recommended - session active" : "recommended - needs login",
       quickstartScore: configured ? 1 : 20,
     };
@@ -372,50 +303,8 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
 
         try {
           const session = await interactiveLogin({ apiId, apiHash });
-
-          // Save credentials and session to config
           const core = getTelegramUserRuntime();
-          if (accountId === DEFAULT_ACCOUNT_ID) {
-            next = {
-              ...next,
-              channels: {
-                ...next.channels,
-                "telegram-user": {
-                  ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-                  enabled: true,
-                  apiId,
-                  apiHash,
-                  session,
-                },
-              },
-            } as OpenClawConfig;
-          } else {
-            next = {
-              ...next,
-              channels: {
-                ...next.channels,
-                "telegram-user": {
-                  ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-                  enabled: true,
-                  accounts: {
-                    ...((next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                      ?.accounts as Record<string, unknown> | undefined),
-                    [accountId]: {
-                      ...(
-                        (next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                          ?.accounts as Record<string, Record<string, unknown>> | undefined
-                      )?.[accountId],
-                      enabled: true,
-                      apiId,
-                      apiHash,
-                      session,
-                    },
-                  },
-                },
-              },
-            } as OpenClawConfig;
-          }
-
+          next = upsertTelegramUserField(next, accountId, { apiId, apiHash, session });
           await core.config.writeConfigFile(next);
           await prompter.note("Login successful! Session saved.", "Success");
           await copyTemplatesToStateDir(prompter);
@@ -426,45 +315,7 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
           );
         }
       } else {
-        // Save API credentials without session
-        if (accountId === DEFAULT_ACCOUNT_ID) {
-          next = {
-            ...next,
-            channels: {
-              ...next.channels,
-              "telegram-user": {
-                ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-                enabled: true,
-                apiId,
-                apiHash,
-              },
-            },
-          } as OpenClawConfig;
-        } else {
-          next = {
-            ...next,
-            channels: {
-              ...next.channels,
-              "telegram-user": {
-                ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-                enabled: true,
-                accounts: {
-                  ...((next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                    ?.accounts as Record<string, unknown> | undefined),
-                  [accountId]: {
-                    ...(
-                      (next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                        ?.accounts as Record<string, Record<string, unknown>> | undefined
-                    )?.[accountId],
-                    enabled: true,
-                    apiId,
-                    apiHash,
-                  },
-                },
-              },
-            },
-          } as OpenClawConfig;
-        }
+        next = upsertTelegramUserField(next, accountId, { apiId, apiHash });
       }
     } else {
       const keepSession = await prompter.confirm({
@@ -472,24 +323,13 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
         initialValue: true,
       });
       if (!keepSession) {
-        // Re-login
         try {
           const session = await interactiveLogin({
             apiId: account.apiId,
             apiHash: account.apiHash,
           });
           const core = getTelegramUserRuntime();
-          next = {
-            ...next,
-            channels: {
-              ...next.channels,
-              "telegram-user": {
-                ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-                enabled: true,
-                session,
-              },
-            },
-          } as OpenClawConfig;
+          next = upsertTelegramUserField(next, accountId, { session });
           await core.config.writeConfigFile(next);
           await prompter.note("Re-login successful! Session saved.", "Success");
           await copyTemplatesToStateDir(prompter);
@@ -503,40 +343,7 @@ export const telegramUserOnboardingAdapter: ChannelOnboardingAdapter = {
     }
 
     // Enable channel
-    if (accountId === DEFAULT_ACCOUNT_ID) {
-      next = {
-        ...next,
-        channels: {
-          ...next.channels,
-          "telegram-user": {
-            ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-            enabled: true,
-          },
-        },
-      } as OpenClawConfig;
-    } else {
-      next = {
-        ...next,
-        channels: {
-          ...next.channels,
-          "telegram-user": {
-            ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-            enabled: true,
-            accounts: {
-              ...((next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                ?.accounts as Record<string, unknown> | undefined),
-              [accountId]: {
-                ...(
-                  (next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                    ?.accounts as Record<string, Record<string, unknown>> | undefined
-                )?.[accountId],
-                enabled: true,
-              },
-            },
-          },
-        },
-      } as OpenClawConfig;
-    }
+    next = upsertTelegramUserField(next, accountId, {});
 
     if (forceAllowFrom) {
       next = await promptAllowFrom({ cfg: next, prompter, accountId });

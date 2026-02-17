@@ -4,6 +4,7 @@ import type {
   ChannelDock,
   ChannelPlugin,
   ChannelGroupContext,
+  ChannelResolveResult,
   OpenClawConfig,
   GroupToolPolicyConfig,
 } from "openclaw/plugin-sdk";
@@ -20,15 +21,13 @@ import {
   resolveChannelAccountConfigBasePath,
   setAccountEnabledInConfigSection,
 } from "openclaw/plugin-sdk";
+import { Api } from "telegram";
 import {
   listTelegramUserAccountIds,
   resolveDefaultTelegramUserAccountId,
   resolveTelegramUserAccountSync,
   isAccountConfigured,
 } from "./accounts.js";
-import { TelegramUserConfigSchema } from "./config-schema.js";
-import { telegramUserOnboardingAdapter } from "./onboarding.js";
-import { collectTelegramUserStatusIssues } from "./status-issues.js";
 import {
   createTelegramUserClient,
   connectClient,
@@ -39,9 +38,12 @@ import {
   probeConnection,
   interactiveLogin,
 } from "./client.js";
+import { TelegramUserConfigSchema } from "./config-schema.js";
+import { telegramUserOnboardingAdapter } from "./onboarding.js";
 import { getClientPool } from "./pool.js";
-import type { ResolvedTelegramUserAccount, TelegramUserSelfInfo } from "./types.js";
 import { getTelegramUserRuntime } from "./runtime.js";
+import { collectTelegramUserStatusIssues } from "./status-issues.js";
+import type { ResolvedTelegramUserAccount, TelegramUserSelfInfo } from "./types.js";
 
 const meta = {
   id: "telegram-user",
@@ -55,9 +57,7 @@ const meta = {
   quickstartAllowFrom: true,
 };
 
-function resolveGroupToolPolicy(
-  params: ChannelGroupContext,
-): GroupToolPolicyConfig | undefined {
+function resolveGroupToolPolicy(params: ChannelGroupContext): GroupToolPolicyConfig | undefined {
   const account = resolveTelegramUserAccountSync({
     cfg: params.cfg,
     accountId: params.accountId ?? undefined,
@@ -261,10 +261,7 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
           );
         if (query?.trim()) {
           const q = query.trim().toLowerCase();
-          peers = peers.filter(
-            (p) =>
-              (p.name ?? "").toLowerCase().includes(q) || p.id.includes(q),
-          );
+          peers = peers.filter((p) => (p.name ?? "").toLowerCase().includes(q) || p.id.includes(q));
         }
         return typeof limit === "number" && limit > 0 ? peers.slice(0, limit) : peers;
       } finally {
@@ -297,14 +294,116 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
         if (query?.trim()) {
           const q = query.trim().toLowerCase();
           groups = groups.filter(
-            (g) =>
-              (g.name ?? "").toLowerCase().includes(q) || g.id.includes(q),
+            (g) => (g.name ?? "").toLowerCase().includes(q) || g.id.includes(q),
           );
         }
         return typeof limit === "number" && limit > 0 ? groups.slice(0, limit) : groups;
       } finally {
         pool.release(client);
       }
+    },
+    listGroupMembers: async ({ cfg, accountId, groupId, limit }) => {
+      const account = resolveTelegramUserAccountSync({ cfg, accountId });
+      if (!isAccountConfigured(account)) {
+        throw new Error("Telegram User not configured");
+      }
+      const pool = getClientPool();
+      const client = await pool.acquire({
+        apiId: account.apiId,
+        apiHash: account.apiHash,
+        session: account.session,
+      });
+      try {
+        const entity = await client.getEntity(groupId);
+        let participants: Api.User[] = [];
+        if (entity instanceof Api.Channel) {
+          const result = await client.invoke(
+            new Api.channels.GetParticipants({
+              channel: entity,
+              filter: new Api.ChannelParticipantsRecent(),
+              offset: 0,
+              limit: limit ?? 100,
+              hash: 0 as unknown as Api.long,
+            }),
+          );
+          if ("users" in result) {
+            participants = result.users as Api.User[];
+          }
+        } else {
+          const fullChat = await client.invoke(new Api.messages.GetFullChat({ chatId: entity.id }));
+          if ("users" in fullChat) {
+            participants = fullChat.users as Api.User[];
+          }
+        }
+        let members: ChannelDirectoryEntry[] = participants.map((u) => ({
+          kind: "user" as const,
+          id: String(u.id),
+          name: [u.firstName, u.lastName].filter(Boolean).join(" ") || undefined,
+        }));
+        if (typeof limit === "number" && limit > 0) {
+          members = members.slice(0, limit);
+        }
+        return members;
+      } finally {
+        pool.release(client);
+      }
+    },
+  },
+  resolver: {
+    resolveTargets: async ({ cfg, accountId, inputs, kind, runtime }) => {
+      const results: ChannelResolveResult[] = [];
+      for (const input of inputs) {
+        const trimmed = input.trim();
+        if (!trimmed) {
+          results.push({ input, resolved: false, note: "empty input" });
+          continue;
+        }
+        // Numeric IDs are already resolved
+        if (/^-?\d{3,}$/.test(trimmed)) {
+          results.push({ input, resolved: true, id: trimmed });
+          continue;
+        }
+        // Try to resolve username via GramJS
+        try {
+          const account = resolveTelegramUserAccountSync({
+            cfg,
+            accountId: accountId ?? DEFAULT_ACCOUNT_ID,
+          });
+          if (!isAccountConfigured(account)) {
+            results.push({ input, resolved: false, note: "not configured" });
+            continue;
+          }
+          const pool = getClientPool();
+          const client = await pool.acquire({
+            apiId: account.apiId,
+            apiHash: account.apiHash,
+            session: account.session,
+          });
+          try {
+            const entity = await client.getEntity(
+              trimmed.startsWith("@") ? trimmed : `@${trimmed}`,
+            );
+            const name =
+              "firstName" in entity
+                ? [entity.firstName, entity.lastName].filter(Boolean).join(" ")
+                : "title" in entity
+                  ? entity.title
+                  : undefined;
+            results.push({
+              input,
+              resolved: true,
+              id: String(entity.id),
+              name: name || undefined,
+            });
+          } finally {
+            pool.release(client);
+          }
+        } catch (err) {
+          runtime.error?.(`telegram-user resolve failed for "${trimmed}": ${String(err)}`);
+          results.push({ input, resolved: false, note: "lookup failed" });
+        }
+      }
+      return results;
     },
   },
   pairing: {
@@ -351,17 +450,38 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
       });
       // Save session to config
       const core = getTelegramUserRuntime();
-      const nextCfg = {
-        ...cfg,
-        channels: {
-          ...cfg.channels,
-          "telegram-user": {
-            ...(cfg.channels?.["telegram-user"] as Record<string, unknown> | undefined),
-            enabled: true,
-            session,
+      const resolvedId = account.accountId;
+      const tguBase = (cfg.channels?.["telegram-user"] ?? {}) as Record<string, unknown>;
+      let nextCfg: OpenClawConfig;
+      if (resolvedId === DEFAULT_ACCOUNT_ID) {
+        nextCfg = {
+          ...cfg,
+          channels: {
+            ...cfg.channels,
+            "telegram-user": { ...tguBase, enabled: true, session },
           },
-        },
-      } as OpenClawConfig;
+        } as OpenClawConfig;
+      } else {
+        const accounts = (tguBase.accounts ?? {}) as Record<string, unknown>;
+        nextCfg = {
+          ...cfg,
+          channels: {
+            ...cfg.channels,
+            "telegram-user": {
+              ...tguBase,
+              enabled: true,
+              accounts: {
+                ...accounts,
+                [resolvedId]: {
+                  ...(accounts[resolvedId] as Record<string, unknown> | undefined),
+                  enabled: true,
+                  session,
+                },
+              },
+            },
+          },
+        } as OpenClawConfig;
+      }
       await core.config.writeConfigFile(nextCfg);
       runtime.log("Telegram User login successful. Session saved to config.");
     },
@@ -402,19 +522,19 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
           },
         } as OpenClawConfig;
       }
+      const tguSection = (next.channels?.["telegram-user"] ?? {}) as Record<string, unknown>;
+      const tguAccounts = (tguSection.accounts ?? {}) as Record<string, unknown>;
       return {
         ...next,
         channels: {
           ...next.channels,
           "telegram-user": {
-            ...next.channels?.["telegram-user"],
+            ...tguSection,
             enabled: true,
             accounts: {
-              ...(next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                ?.accounts,
+              ...tguAccounts,
               [accountId]: {
-                ...((next.channels?.["telegram-user"] as Record<string, unknown> | undefined)
-                  ?.accounts as Record<string, unknown> | undefined)?.[accountId],
+                ...(tguAccounts[accountId] as Record<string, unknown> | undefined),
                 enabled: true,
               },
             },
@@ -450,7 +570,12 @@ export const telegramUserPlugin: ChannelPlugin<ResolvedTelegramUserAccount> = {
     },
     sendMedia: async ({ to, text, mediaUrl, accountId, cfg }) => {
       if (!mediaUrl) {
-        return { channel: "telegram-user" as const, ok: false, messageId: "", error: new Error("mediaUrl is required") };
+        return {
+          channel: "telegram-user" as const,
+          ok: false,
+          messageId: "",
+          error: new Error("mediaUrl is required"),
+        };
       }
       const account = resolveTelegramUserAccountSync({ cfg, accountId });
       const pool = getClientPool();
